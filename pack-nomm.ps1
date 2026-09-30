@@ -1,11 +1,11 @@
-# Pack SkinGate-1.1.1.zip for NOMM (host + clients). Allowlist optional in the zip.
+# Pack SkinGate-1.1.2.zip for NOMM (host + clients). Allowlist optional in the zip.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $dist = Join-Path $root 'dist'
 $dll = Join-Path $root 'bin\SkinGate.dll'
 $pluginAllowlist = 'C:\Steam\steamapps\common\Nuclear Option\BepInEx\plugins\SkinGate\allowlist.json'
 $botAllowlist = 'C:\DarkSkies\Discord Bot\data\allowlist.json'
-$outZip = Join-Path $dist 'SkinGate-1.1.1.zip'
+$outZip = Join-Path $dist 'SkinGate-1.1.2.zip'
 $staging = Join-Path $env:TEMP 'SkinGate-nomm-pack'
 
 if (-not (Test-Path $dll)) {
@@ -33,7 +33,7 @@ Compress-Archive -Path (Join-Path $staging '*') -DestinationPath $outZip -Compre
 Remove-Item -Recurse -Force $staging
 
 $desktop = [Environment]::GetFolderPath('Desktop')
-Copy-Item -Force $outZip (Join-Path $desktop 'SkinGate-1.1.1.zip')
+Copy-Item -Force $outZip (Join-Path $desktop 'SkinGate-1.1.2.zip')
 
 Write-Host "Created: $outZip"
-Write-Host "Copied to Desktop: SkinGate-1.1.1.zip"
+Write-Host "Copied to Desktop: SkinGate-1.1.2.zip"

@@ -23,6 +23,91 @@ namespace SkinGate
     }
 
     /// <summary>
+    /// BepInEx plugins are not Mirage-weaved, so register readers/writers at runtime.
+    /// Without this, clients stay fail-closed on vanilla skins ("No writer found…").
+    /// </summary>
+    internal static class SkinGateMessageSerializers
+    {
+        private static bool _registered;
+
+        public static void EnsureRegistered()
+        {
+            if (_registered)
+                return;
+
+            Writer<SkinGateAllowlistRequestMessage>.Write = WriteRequest;
+            Reader<SkinGateAllowlistRequestMessage>.Read = ReadRequest;
+
+            Writer<SkinGateAllowlistMessage>.Write = WriteAllowlist;
+            Reader<SkinGateAllowlistMessage>.Read = ReadAllowlist;
+
+            Writer<SkinGateAllowlistAckMessage>.Write = WriteAck;
+            Reader<SkinGateAllowlistAckMessage>.Read = ReadAck;
+
+            _registered = true;
+        }
+
+        private static void WriteRequest(NetworkWriter writer, SkinGateAllowlistRequestMessage _)
+        {
+            // empty payload
+        }
+
+        private static SkinGateAllowlistRequestMessage ReadRequest(NetworkReader reader)
+        {
+            return default;
+        }
+
+        private static void WriteAllowlist(NetworkWriter writer, SkinGateAllowlistMessage message)
+        {
+            var json = message.Json ?? "";
+            var bytes = Encoding.UTF8.GetBytes(json);
+            writer.WriteInt32(bytes.Length);
+            if (bytes.Length > 0)
+                writer.WriteBytes(bytes, 0, bytes.Length);
+            writer.WriteString(message.Hash ?? "");
+            writer.WriteInt32(message.PlayerCount);
+        }
+
+        private static SkinGateAllowlistMessage ReadAllowlist(NetworkReader reader)
+        {
+            var len = reader.ReadInt32();
+            string json;
+            if (len <= 0)
+            {
+                json = "";
+            }
+            else
+            {
+                var buf = new byte[len];
+                reader.ReadBytes(buf, 0, len);
+                json = Encoding.UTF8.GetString(buf);
+            }
+
+            return new SkinGateAllowlistMessage
+            {
+                Json = json,
+                Hash = reader.ReadString() ?? "",
+                PlayerCount = reader.ReadInt32(),
+            };
+        }
+
+        private static void WriteAck(NetworkWriter writer, SkinGateAllowlistAckMessage message)
+        {
+            writer.WriteString(message.Hash ?? "");
+            writer.WriteUInt64(message.SteamId);
+        }
+
+        private static SkinGateAllowlistAckMessage ReadAck(NetworkReader reader)
+        {
+            return new SkinGateAllowlistAckMessage
+            {
+                Hash = reader.ReadString() ?? "",
+                SteamId = reader.ReadUInt64(),
+            };
+        }
+    }
+
+    /// <summary>
     /// Host reads local allowlist.json; clients request/receive it over Mirage with ACK + retry.
     /// </summary>
     public sealed class AllowlistNetworkSync : MonoBehaviour
@@ -78,11 +163,12 @@ namespace SkinGate
                 return;
             try
             {
+                SkinGateMessageSerializers.EnsureRegistered();
                 MessagePacker.RegisterMessage<SkinGateAllowlistRequestMessage>();
                 MessagePacker.RegisterMessage<SkinGateAllowlistMessage>();
                 MessagePacker.RegisterMessage<SkinGateAllowlistAckMessage>();
                 _messagesRegistered = true;
-                SkinGatePlugin.Log?.LogInfo("SkinGate network messages registered.");
+                SkinGatePlugin.Log?.LogInfo("SkinGate network messages registered (with runtime serializers).");
             }
             catch (Exception ex)
             {
@@ -186,6 +272,7 @@ namespace SkinGate
                 if (_client == null || !_client.Active || _client.IsHost)
                     return;
 
+                SkinGateMessageSerializers.EnsureRegistered();
                 var ack = new SkinGateAllowlistAckMessage
                 {
                     Hash = hash ?? "",
@@ -206,6 +293,7 @@ namespace SkinGate
                 if (_client == null || !_client.Active || _client.IsHost)
                     return;
 
+                SkinGateMessageSerializers.EnsureRegistered();
                 _clientRequestCount += 1;
                 SkinGatePlugin.Log?.LogInfo(
                     $"SkinGate SYNC request #{_clientRequestCount} to host…");
@@ -228,6 +316,7 @@ namespace SkinGate
             if (_server == null || !_server.Active)
                 return;
 
+            SkinGateMessageSerializers.EnsureRegistered();
             if (!TryBuildPayload(out var message))
                 return;
 
@@ -248,6 +337,7 @@ namespace SkinGate
             if (_server == null || !_server.Active || player == null)
                 return;
 
+            SkinGateMessageSerializers.EnsureRegistered();
             if (!TryBuildPayload(out var message))
                 return;
 
