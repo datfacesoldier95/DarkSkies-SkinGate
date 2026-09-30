@@ -1,4 +1,4 @@
-# Build -> deploy to this PC -> pack NOMM zip -> push GitHub release.
+﻿# Build -> deploy to this PC -> pack NOMM zip -> push GitHub release.
 # Usage: .\release.ps1 [-Notes "changelog"]
 param(
   [string]$Notes = ""
@@ -49,7 +49,7 @@ $env:GIT_COMMITTER_EMAIL = $env:GIT_AUTHOR_EMAIL
 $status = & $git status --porcelain
 if ($status) {
   if (-not $Notes) { $Notes = $displayName }
-  & $git commit -m "Release $displayName"
+  & $git commit --trailer "Co-authored-by: Cursor <cursoragent@cursor.com>" -m "Release $displayName"
   & $git push
 } else {
   & $git push
@@ -59,8 +59,11 @@ if (-not $Notes) {
   $Notes = "$displayName - host and all joiners must update. In NOMM the mod appears as '$displayName'."
 }
 
-gh release view $tag 2>$null | Out-Null
-if ($LASTEXITCODE -eq 0) {
+$releaseExists = $false
+cmd /c "gh release view $tag >NUL 2>&1"
+if ($LASTEXITCODE -eq 0) { $releaseExists = $true }
+
+if ($releaseExists) {
   Write-Host "Release $tag already exists - uploading asset..."
   gh release upload $tag $zipPath --clobber
 } else {

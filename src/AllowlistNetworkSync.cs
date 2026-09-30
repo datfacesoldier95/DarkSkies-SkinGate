@@ -64,25 +64,33 @@ namespace SkinGate
 
         private static SkinGateAllowlistMessage ReadAllowlist(NetworkReader reader)
         {
-            var len = reader.ReadInt32();
-            string json;
-            if (len <= 0)
+            try
             {
-                json = "";
-            }
-            else
-            {
-                var buf = new byte[len];
-                reader.ReadBytes(buf, 0, len);
-                json = Encoding.UTF8.GetString(buf);
-            }
+                var len = reader.ReadInt32();
+                string json;
+                if (len <= 0 || len > 2_000_000)
+                {
+                    json = "";
+                }
+                else
+                {
+                    var buf = new byte[len];
+                    reader.ReadBytes(buf, 0, len);
+                    json = Encoding.UTF8.GetString(buf);
+                }
 
-            return new SkinGateAllowlistMessage
+                return new SkinGateAllowlistMessage
+                {
+                    Json = json,
+                    Hash = reader.ReadString() ?? "",
+                    PlayerCount = reader.ReadInt32(),
+                };
+            }
+            catch (Exception ex)
             {
-                Json = json,
-                Hash = reader.ReadString() ?? "",
-                PlayerCount = reader.ReadInt32(),
-            };
+                SkinGatePlugin.Log?.LogWarning($"SkinGate allowlist deserialize failed: {ex.Message}");
+                return default;
+            }
         }
 
         private static void WriteAck(NetworkWriter writer, SkinGateAllowlistAckMessage message)
@@ -106,10 +114,10 @@ namespace SkinGate
     /// </summary>
     public sealed class AllowlistNetworkSync : MonoBehaviour
     {
-        private const float HookRetrySeconds = 1f;
-        private const float ClientRequestInterval = 2f;
-        private const float HostPushDelaySeconds = 0.75f;
-        private const int MaxClientRequests = 30;
+        private const float HookRetrySeconds = 0.5f;
+        private const float ClientRequestInterval = 1.5f;
+        private const float HostBackupPushDelaySeconds = 3.5f;
+        private const int MaxClientRequests = 40;
 
         private bool _messagesRegistered;
         private bool _serverHooked;
@@ -119,6 +127,13 @@ namespace SkinGate
         private int _clientRequestCount;
         private NetworkServer _server;
         private NetworkClient _client;
+
+        private void Awake()
+        {
+            // Register before any multiplayer connect — late registration causes
+            // Mirage to drop joiners with "local client stopped".
+            TryRegisterMessages();
+        }
 
         private void Update()
         {
@@ -145,10 +160,7 @@ namespace SkinGate
         private void OnDestroy()
         {
             if (_server != null)
-            {
-                _server.Connected.RemoveListener(OnServerPlayerConnected);
                 _server.Authenticated.RemoveListener(OnServerPlayerAuthenticated);
-            }
         }
 
         private void TryRegisterMessages()
@@ -180,10 +192,7 @@ namespace SkinGate
                 if (_serverHooked)
                 {
                     if (_server != null)
-                    {
-                        _server.Connected.RemoveListener(OnServerPlayerConnected);
                         _server.Authenticated.RemoveListener(OnServerPlayerAuthenticated);
-                    }
                     _serverHooked = false;
                     _server = null;
                 }
@@ -194,19 +203,16 @@ namespace SkinGate
                 return;
 
             if (_server != null)
-            {
-                _server.Connected.RemoveListener(OnServerPlayerConnected);
                 _server.Authenticated.RemoveListener(OnServerPlayerAuthenticated);
-            }
 
             SkinGateMessageSerializers.EnsureRegistered();
             _server = server;
-            server.Connected.AddListener(OnServerPlayerConnected);
+            // Do NOT push on Connected — client often has no readers yet and Mirage drops them.
             server.Authenticated.AddListener(OnServerPlayerAuthenticated);
             server.MessageHandler.RegisterHandler<SkinGateAllowlistRequestMessage>(OnAllowlistRequested, false);
             server.MessageHandler.RegisterHandler<SkinGateAllowlistAckMessage>(OnAllowlistAck, false);
             _serverHooked = true;
-            SkinGatePlugin.Log?.LogInfo("SkinGate host sync active (allowlist from host file).");
+            SkinGatePlugin.Log?.LogInfo("SkinGate host sync active (request-driven + delayed backup).");
         }
 
         private void TryHookClient()
@@ -245,20 +251,15 @@ namespace SkinGate
             }
         }
 
-        private void OnServerPlayerConnected(INetworkPlayer player)
-        {
-            // Backup push; primary is Authenticated after a short delay.
-            ScheduleSend(player);
-        }
-
         private void OnServerPlayerAuthenticated(INetworkPlayer player)
         {
+            // Backup only — primary path is client REQUEST after its readers are ready.
             ScheduleSend(player);
         }
 
         private void ScheduleSend(INetworkPlayer player)
         {
-            StartCoroutine(SendAfterDelay(player, HostPushDelaySeconds));
+            StartCoroutine(SendAfterDelay(player, HostBackupPushDelaySeconds));
         }
 
         private System.Collections.IEnumerator SendAfterDelay(INetworkPlayer player, float delay)
