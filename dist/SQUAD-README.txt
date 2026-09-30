@@ -1,18 +1,18 @@
-DarkSkies SkinGate — install once (host and all joiners)
+DarkSkies SkinGate 1.1.7 — install once (host and all joiners)
 
-IMPORTANT: Host and joiners must use the SAME SkinGate version or the server will not appear.
+CRITICAL: Host and joiners must use the SAME SkinGate version.
+1.1.7 removes network allowlist sync (it was causing "Local Client Stopped").
 
-1. Install BepInEx via NOMM if needed.
-2. Remove any old SkinGate installs first:
-   - folders named SkinGate, DarkSkies SkinGate *, or DarkSkies.SkinGate
-   - any SkinGate*.zip sitting in BepInEx\plugins
-3. Import DarkSkies-SkinGate-*.zip in NOMM (Add from File), or extract so you get:
-   BepInEx\plugins\DarkSkies.SkinGate\
-4. Enable the mod. NOMM id is DarkSkies.SkinGate (stable). Version is in the mod details.
+Install
+1. Remove old SkinGate / DarkSkies SkinGate * folders and any SkinGate zips in plugins.
+2. Import DarkSkies-SkinGate-1.1.7.zip (folder must be BepInEx\plugins\DarkSkies.SkinGate).
+3. Enable the mod.
 
-You do NOT need allowlist.json on client PCs.
-Host runs Discord /sync-skins, then hosts. Clients sync in-session.
+Allowlist (everyone who needs squadron skins)
+1. Admin runs Discord /sync-skins — it attaches allowlist.json.
+2. Host already gets the file beside SkinGate.dll automatically.
+3. Joiners download allowlist.json into:
+   BepInEx\plugins\DarkSkies.SkinGate\allowlist.json
+4. Press F11 in-game (or restart) to reload.
 
-Check BepInEx\LogOutput.log for:
-  SkinGate SYNC recv … hash=…
-  SkinGate SYNC ack … (on the host)
+Without allowlist.json, players only see vanilla skins.

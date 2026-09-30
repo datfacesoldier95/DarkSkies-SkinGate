@@ -15,7 +15,7 @@ namespace SkinGate
     {
         public const string PluginGuid = "com.darkskies.skingate";
         public const string PluginName = "DarkSkies SkinGate";
-        public const string PluginVersion = "1.1.6";
+        public const string PluginVersion = "1.1.7";
 
         public static SkinGatePlugin Instance { get; private set; }
         public static ManualLogSource Log { get; private set; }
@@ -59,74 +59,55 @@ namespace SkinGate
                 true,
                 "Filter LoadoutSelector.GetLiveryOptions for the local player's SteamID.");
 
-            if (AllowlistSession.IsHostAllowlistSource)
-            {
-                var allowlistPath = ResolveAllowlistPath(AllowlistPath.Value);
-                AllowlistStore.Reload(allowlistPath);
-                _seenWriteTimeUtc = AllowlistStore.FileWriteTimeUtc;
-            }
-            else
-            {
-                AllowlistStore.SetExpectHostAllowlist(true);
-            }
-
-            gameObject.AddComponent<AllowlistNetworkSync>();
+            // File-based allowlist only — Mirage custom messages were dropping joiners
+            // ("local client stopped" / connect failed).
+            AllowlistStore.SetExpectHostAllowlist(false);
+            var allowlistPath = ResolveAllowlistPath(AllowlistPath.Value);
+            AllowlistStore.Reload(allowlistPath);
+            _seenWriteTimeUtc = AllowlistStore.FileWriteTimeUtc;
 
             _harmony = new Harmony(PluginGuid);
             _harmony.PatchAll();
 
-            if (AllowlistSession.IsHostAllowlistSource)
+            Log.LogInfo($"{PluginName} {PluginVersion} loaded. Allowlist (file): {allowlistPath}");
+            if (AllowlistStore.Data.Players.Count == 0)
             {
-                var allowlistPath = ResolveAllowlistPath(AllowlistPath.Value);
-                Log.LogInfo($"{PluginName} {PluginVersion} loaded. Host allowlist: {allowlistPath}");
-                if (AllowlistStore.Data.Players.Count == 0)
-                {
-                    Log.LogWarning(
-                        "Allowlist has 0 players — run Discord `/sync-skins` and press F11 on the host PC.");
-                }
-            }
-            else
-            {
-                Log.LogInfo($"{PluginName} {PluginVersion} loaded. Client mode — allowlist will sync from host.");
+                Log.LogWarning(
+                    "Allowlist has 0 players — run Discord `/sync-skins`, put allowlist.json next to SkinGate.dll, press F11.");
             }
         }
 
         private void Update()
         {
-            if (AllowlistSession.IsHostAllowlistSource)
+            if (Input.GetKeyDown(ReloadKey.Value))
             {
-                if (Input.GetKeyDown(ReloadKey.Value))
+                var path = ResolveAllowlistPath(AllowlistPath.Value);
+                AllowlistStore.Reload(path);
+                _seenWriteTimeUtc = AllowlistStore.FileWriteTimeUtc;
+                Log.LogInfo($"Allowlist reloaded via {ReloadKey.Value} ({path}).");
+            }
+
+            // Auto-reload when /sync-skins (or a dropped file) rewrites allowlist.json.
+            if (Time.unscaledTime >= _nextAllowlistPoll)
+            {
+                _nextAllowlistPoll = Time.unscaledTime + 2f;
+                try
                 {
                     var path = ResolveAllowlistPath(AllowlistPath.Value);
-                    AllowlistStore.Reload(path);
-                    _seenWriteTimeUtc = AllowlistStore.FileWriteTimeUtc;
-                    AllowlistNetworkSync.HostBroadcastAllowlist();
-                    Log.LogInfo($"Allowlist reloaded via {ReloadKey.Value} ({path}).");
-                }
-
-                // Auto-reload when /sync-skins rewrites the file (host PC only).
-                if (Time.unscaledTime >= _nextAllowlistPoll)
-                {
-                    _nextAllowlistPoll = Time.unscaledTime + 2f;
-                    try
+                    if (File.Exists(path))
                     {
-                        var path = ResolveAllowlistPath(AllowlistPath.Value);
-                        if (File.Exists(path))
+                        var writeTime = File.GetLastWriteTimeUtc(path);
+                        if (writeTime != _seenWriteTimeUtc)
                         {
-                            var writeTime = File.GetLastWriteTimeUtc(path);
-                            if (writeTime != _seenWriteTimeUtc)
-                            {
-                                AllowlistStore.Reload(path);
-                                _seenWriteTimeUtc = AllowlistStore.FileWriteTimeUtc;
-                                AllowlistNetworkSync.HostBroadcastAllowlist();
-                                Log.LogInfo("Allowlist reloaded (file changed) and broadcast to clients.");
-                            }
+                            AllowlistStore.Reload(path);
+                            _seenWriteTimeUtc = AllowlistStore.FileWriteTimeUtc;
+                            Log.LogInfo("Allowlist reloaded (file changed).");
                         }
                     }
-                    catch (Exception ex)
-                    {
-                        Log.LogWarning($"Allowlist poll failed: {ex.Message}");
-                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.LogWarning($"Allowlist poll failed: {ex.Message}");
                 }
             }
         }
