@@ -15,7 +15,7 @@ namespace SkinGate
     {
         public const string PluginGuid = "com.darkskies.skingate";
         public const string PluginName = "DarkSkies SkinGate";
-        public const string PluginVersion = "1.1.8";
+        public const string PluginVersion = "1.1.9";
 
         public static SkinGatePlugin Instance { get; private set; }
         public static ManualLogSource Log { get; private set; }
@@ -39,13 +39,13 @@ namespace SkinGate
                 "General",
                 "AllowlistPath",
                 defaultAllowlist,
-                "Path to allowlist.json (default: next to SkinGate.dll). /sync-skins can also copy here for squad PCs.");
+                "Host path to allowlist.json (default: next to SkinGate.dll). Joiners receive this over Steam on join.");
 
             ReloadKey = Config.Bind(
                 "General",
                 "ReloadKey",
                 KeyCode.F11,
-                "Hotkey to reload allowlist.json mid-session after /sync-skins.");
+                "Hotkey to reload allowlist.json on the host and push it to joiners.");
 
             EnforceOnHost = Config.Bind(
                 "General",
@@ -59,34 +59,48 @@ namespace SkinGate
                 true,
                 "Filter LoadoutSelector.GetLiveryOptions for the local player's SteamID.");
 
-            // File-based allowlist only — Mirage custom messages were dropping joiners
-            // ("local client stopped" / connect failed).
-            var allowlistPath = ResolveAllowlistPath(AllowlistPath.Value);
-            AllowlistStore.Reload(allowlistPath);
-            _seenWriteTimeUtc = AllowlistStore.FileWriteTimeUtc;
+            // Host owns allowlist.json; joiners get it via Steam NetworkingMessages (not Mirage).
+            if (AllowlistSession.IsClientNonHost)
+            {
+                AllowlistStore.SetExpectHostAllowlist(true);
+                AllowlistStore.InvalidateHostAllowlist();
+                Log.LogInfo($"{PluginName} {PluginVersion} loaded (client — waiting for host allowlist).");
+            }
+            else
+            {
+                var allowlistPath = ResolveAllowlistPath(AllowlistPath.Value);
+                AllowlistStore.Reload(allowlistPath);
+                _seenWriteTimeUtc = AllowlistStore.FileWriteTimeUtc;
+                Log.LogInfo($"{PluginName} {PluginVersion} loaded. Host allowlist: {allowlistPath}");
+                if (AllowlistStore.Data.Players.Count == 0)
+                {
+                    Log.LogWarning(
+                        "Allowlist has 0 players — run Discord `/sync-skins` on the host before the session.");
+                }
+            }
+
+            gameObject.AddComponent<AllowlistSteamSync>();
 
             _harmony = new Harmony(PluginGuid);
             _harmony.PatchAll();
-
-            Log.LogInfo($"{PluginName} {PluginVersion} loaded. Allowlist (file): {allowlistPath}");
-            if (AllowlistStore.Data.Players.Count == 0)
-            {
-                Log.LogWarning(
-                    "Allowlist has 0 players — run Discord `/sync-skins`, put allowlist.json next to SkinGate.dll, press F11.");
-            }
         }
 
         private void Update()
         {
+            // Joiners do not reload from a local file while expecting / using host sync.
+            if (AllowlistSession.IsClientNonHost || AllowlistStore.ExpectHostAllowlist)
+                return;
+
             if (Input.GetKeyDown(ReloadKey.Value))
             {
                 var path = ResolveAllowlistPath(AllowlistPath.Value);
                 AllowlistStore.Reload(path);
                 _seenWriteTimeUtc = AllowlistStore.FileWriteTimeUtc;
                 Log.LogInfo($"Allowlist reloaded via {ReloadKey.Value} ({path}).");
+                AllowlistSteamSync.HostBroadcastAllowlist();
             }
 
-            // Auto-reload when /sync-skins (or a dropped file) rewrites allowlist.json.
+            // Auto-reload when /sync-skins rewrites allowlist.json, then push to joiners.
             if (Time.unscaledTime >= _nextAllowlistPoll)
             {
                 _nextAllowlistPoll = Time.unscaledTime + 2f;
@@ -101,6 +115,7 @@ namespace SkinGate
                             AllowlistStore.Reload(path);
                             _seenWriteTimeUtc = AllowlistStore.FileWriteTimeUtc;
                             Log.LogInfo("Allowlist reloaded (file changed).");
+                            AllowlistSteamSync.HostBroadcastAllowlist();
                         }
                     }
                 }
@@ -270,11 +285,36 @@ namespace SkinGate
         public static DateTime FileWriteTimeUtc { get; private set; }
         public static string LoadedPath { get; private set; }
         public static bool HasHostAllowlist { get; private set; }
+        public static bool ExpectHostAllowlist { get; private set; }
 
         public static void SetExpectHostAllowlist(bool expect)
         {
-            // No-op: network allowlist sync removed (caused Local Client Stopped).
-            _ = expect;
+            ExpectHostAllowlist = expect;
+        }
+
+        public static void ApplyHostJson(string json)
+        {
+            try
+            {
+                Data = AllowlistData.FromJson(json);
+                LoadedAt = DateTime.UtcNow;
+                HasHostAllowlist = true;
+                LoadedPath = "(from host via Steam)";
+                AirframeSquadronCache.Clear();
+                var hash = AllowlistSteamSync.ShortHash(json);
+                SkinGatePlugin.Log?.LogInfo(
+                    $"Allowlist synced from host ({Data.Players.Count} players) hash={hash}.");
+            }
+            catch (Exception ex)
+            {
+                SkinGatePlugin.Log?.LogError($"Host allowlist apply failed: {ex}");
+            }
+        }
+
+        public static void InvalidateHostAllowlist()
+        {
+            HasHostAllowlist = false;
+            AirframeSquadronCache.Clear();
         }
 
         public static void Reload(string path)
@@ -296,7 +336,8 @@ namespace SkinGate
                 var json = File.ReadAllText(path);
                 Data = AllowlistData.FromJson(json);
                 LoadedAt = DateTime.UtcNow;
-                HasHostAllowlist = true;
+                // While waiting on host Steam sync, keep fail-closed even if a local file exists.
+                HasHostAllowlist = !ExpectHostAllowlist;
                 AirframeSquadronCache.Clear();
                 SkinGatePlugin.Log?.LogInfo(
                     $"Allowlist loaded ({Data.Players.Count} players) from {path}");
@@ -306,6 +347,7 @@ namespace SkinGate
                 SkinGatePlugin.Log?.LogError($"Failed to load allowlist: {ex}");
                 Data = AllowlistData.Empty();
                 LoadedAt = DateTime.UtcNow;
+                AirframeSquadronCache.Clear();
             }
         }
 
@@ -582,17 +624,26 @@ namespace SkinGate
                 if (steamId == 0)
                     return;
 
-                // If none of this airframe's options are squadron-assigned, show vanilla builtins.
-                var hasSquadronSkinForAirframe =
-                    AllowlistStore.Data.OptionsContainExplicitAllow(steamId, resultsList);
-                var defName = aircraft != null ? aircraft.name : null;
-                AllowlistStore.CacheAirframeMode(steamId, defName, hasSquadronSkinForAirframe);
+                // Waiting for host Steam sync: fail closed to builtins only.
+                var waitingForHost = AllowlistStore.ExpectHostAllowlist && !AllowlistStore.HasHostAllowlist;
+
+                var hasSquadronSkinForAirframe = !waitingForHost
+                    && AllowlistStore.Data.OptionsContainExplicitAllow(steamId, resultsList);
+                if (!waitingForHost)
+                {
+                    var defName = aircraft != null ? aircraft.name : null;
+                    AllowlistStore.CacheAirframeMode(steamId, defName, hasSquadronSkinForAirframe);
+                }
 
                 for (var i = resultsList.Count - 1; i >= 0; i--)
                 {
                     var key = resultsList[i].Item1;
                     bool allowed;
-                    if (!hasSquadronSkinForAirframe)
+                    if (waitingForHost)
+                    {
+                        allowed = key.Type == LiveryKey.KeyType.Builtin;
+                    }
+                    else if (!hasSquadronSkinForAirframe)
                     {
                         allowed = key.Type == LiveryKey.KeyType.Builtin;
                     }
@@ -607,7 +658,7 @@ namespace SkinGate
                         continue;
                     }
 
-                    if (!hasSquadronSkinForAirframe)
+                    if (waitingForHost || !hasSquadronSkinForAirframe)
                         continue;
 
                     var customLabel = AllowlistStore.Data.GetCustomLabel(steamId, key);

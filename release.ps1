@@ -1,4 +1,4 @@
-﻿# Build -> deploy to this PC -> pack NOMM zip -> push GitHub release.
+# Build -> deploy to this PC -> pack NOMM zip -> push GitHub release.
 # Usage: .\release.ps1 [-Notes "changelog"]
 param(
   [string]$Notes = ""
