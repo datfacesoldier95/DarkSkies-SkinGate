@@ -14,8 +14,8 @@ namespace SkinGate
     public class SkinGatePlugin : BaseUnityPlugin
     {
         public const string PluginGuid = "com.darkskies.skingate";
-        public const string PluginName = "SkinGate";
-        public const string PluginVersion = "1.1.3";
+        public const string PluginName = "DarkSkies SkinGate";
+        public const string PluginVersion = "1.1.4";
 
         public static SkinGatePlugin Instance { get; private set; }
         public static ManualLogSource Log { get; private set; }

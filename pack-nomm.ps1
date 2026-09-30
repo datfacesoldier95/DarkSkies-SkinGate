@@ -1,39 +1,77 @@
-# Pack SkinGate-1.1.3.zip for NOMM (host + clients). Allowlist optional in the zip.
+# Pack DarkSkies-SkinGate-<version>.zip for NOMM (host + clients).
+# Zip root folder name = NOMM display id (includes version).
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $dist = Join-Path $root 'dist'
 $dll = Join-Path $root 'bin\SkinGate.dll'
-$pluginAllowlist = 'C:\Steam\steamapps\common\Nuclear Option\BepInEx\plugins\SkinGate\allowlist.json'
 $botAllowlist = 'C:\DarkSkies\Discord Bot\data\allowlist.json'
-$outZip = Join-Path $dist 'SkinGate-1.1.3.zip'
+$pluginsRoot = 'C:\Steam\steamapps\common\Nuclear Option\BepInEx\plugins'
 $staging = Join-Path $env:TEMP 'SkinGate-nomm-pack'
+
+$pluginCs = Get-Content (Join-Path $root 'src\SkinGatePlugin.cs') -Raw
+if ($pluginCs -notmatch 'PluginVersion\s*=\s*"([^"]+)"') {
+  Write-Error 'Could not find PluginVersion in SkinGatePlugin.cs'
+}
+$version = $Matches[1]
+$modFolderName = "DarkSkies SkinGate $version"
+$zipName = "DarkSkies-SkinGate-$version.zip"
+$outZip = Join-Path $dist $zipName
 
 if (-not (Test-Path $dll)) {
   Write-Error "Build first: dotnet build `"$root\SkinGate.csproj`" -c Release"
 }
 
-New-Item -ItemType Directory -Force -Path $dist, $staging | Out-Null
+# Refresh meta.json id/version/filename for this pack
+$metaPath = Join-Path $dist 'meta.json'
+# Write meta.json as text so we can keep both downloadUrl keys NOMM sometimes emits.
+@"
+{
+  "id": "$modFolderName",
+  "artifact": {
+    "fileName": "$zipName",
+    "version": "$version",
+    "category": "release",
+    "type": "plugin",
+    "gameVersion": "0.34.2",
+    "downloadUrl": "",
+    "downloadURL": null,
+    "hash": "",
+    "extends": null,
+    "dependencies": [],
+    "incompatibilities": []
+  }
+}
+"@ | Set-Content -Path $metaPath -Encoding utf8
 
-Copy-Item -Force $dll (Join-Path $staging 'SkinGate.dll')
-Copy-Item -Force (Join-Path $dist 'meta.json') (Join-Path $staging 'meta.json')
-Copy-Item -Force (Join-Path $dist 'SQUAD-README.txt') (Join-Path $staging 'SQUAD-README.txt')
+if (Test-Path $staging) { Remove-Item -Recurse -Force $staging }
+$modStaging = Join-Path $staging $modFolderName
+New-Item -ItemType Directory -Force -Path $dist, $modStaging | Out-Null
 
-$allowSrc = if (Test-Path $pluginAllowlist) { $pluginAllowlist }
+Copy-Item -Force $dll (Join-Path $modStaging 'SkinGate.dll')
+Copy-Item -Force $metaPath (Join-Path $modStaging 'meta.json')
+Copy-Item -Force (Join-Path $dist 'SQUAD-README.txt') (Join-Path $modStaging 'SQUAD-README.txt')
+
+$pluginAllowlist = Get-ChildItem $pluginsRoot -Recurse -Filter 'allowlist.json' -ErrorAction SilentlyContinue |
+  Where-Object { $_.DirectoryName -match 'SkinGate' } |
+  Select-Object -First 1 -ExpandProperty FullName
+
+$allowSrc = if ($pluginAllowlist) { $pluginAllowlist }
   elseif (Test-Path $botAllowlist) { $botAllowlist }
   else { $null }
 if ($allowSrc) {
-  Copy-Item -Force $allowSrc (Join-Path $staging 'allowlist.json')
+  Copy-Item -Force $allowSrc (Join-Path $modStaging 'allowlist.json')
 } else {
   Write-Host 'Note: no allowlist.json yet — clients do not need one; host should /sync-skins after install.'
 }
 
 if (Test-Path $outZip) { Remove-Item -Force $outZip }
-Compress-Archive -Path (Join-Path $staging '*') -DestinationPath $outZip -CompressionLevel Optimal
+Compress-Archive -Path (Join-Path $staging $modFolderName) -DestinationPath $outZip -CompressionLevel Optimal
 
 Remove-Item -Recurse -Force $staging
 
 $desktop = [Environment]::GetFolderPath('Desktop')
-Copy-Item -Force $outZip (Join-Path $desktop 'SkinGate-1.1.3.zip')
+Copy-Item -Force $outZip (Join-Path $desktop $zipName)
 
 Write-Host "Created: $outZip"
-Write-Host "Copied to Desktop: SkinGate-1.1.3.zip"
+Write-Host "Copied to Desktop: $zipName"
+Write-Host "NOMM will show: $modFolderName"
