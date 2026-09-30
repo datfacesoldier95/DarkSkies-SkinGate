@@ -1,7 +1,7 @@
-DarkSkies SkinGate 1.1.2 — install once (host and all joiners)
+DarkSkies SkinGate 1.1.3 — install once (host and all joiners)
 
 1. Install BepInEx via NOMM if needed.
-2. Import SkinGate-1.1.2.zip in NOMM → Install → enable.
+2. Import SkinGate-1.1.3.zip in NOMM → Install → enable.
 
 Airframes with no squadron skin assigned show vanilla skins.
 Airframes that have a squadron skin only show that skin.

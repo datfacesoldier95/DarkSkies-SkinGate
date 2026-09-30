@@ -28,13 +28,9 @@ namespace SkinGate
     /// </summary>
     internal static class SkinGateMessageSerializers
     {
-        private static bool _registered;
-
         public static void EnsureRegistered()
         {
-            if (_registered)
-                return;
-
+            // Always re-assign: Mirage clears Writer/Reader delegates across scene / net restarts.
             Writer<SkinGateAllowlistRequestMessage>.Write = WriteRequest;
             Reader<SkinGateAllowlistRequestMessage>.Read = ReadRequest;
 
@@ -43,8 +39,6 @@ namespace SkinGate
 
             Writer<SkinGateAllowlistAckMessage>.Write = WriteAck;
             Reader<SkinGateAllowlistAckMessage>.Read = ReadAck;
-
-            _registered = true;
         }
 
         private static void WriteRequest(NetworkWriter writer, SkinGateAllowlistRequestMessage _)
@@ -159,11 +153,13 @@ namespace SkinGate
 
         private void TryRegisterMessages()
         {
-            if (_messagesRegistered)
-                return;
             try
             {
+                // Re-bind writers every tick attempt — Mirage drops them across net restarts.
                 SkinGateMessageSerializers.EnsureRegistered();
+                if (_messagesRegistered)
+                    return;
+
                 MessagePacker.RegisterMessage<SkinGateAllowlistRequestMessage>();
                 MessagePacker.RegisterMessage<SkinGateAllowlistMessage>();
                 MessagePacker.RegisterMessage<SkinGateAllowlistAckMessage>();
@@ -178,13 +174,32 @@ namespace SkinGate
 
         private void TryHookServer()
         {
-            if (_serverHooked)
-                return;
-
             var server = UnityEngine.Object.FindObjectOfType<NetworkServer>();
             if (server == null || !server.Active)
+            {
+                if (_serverHooked)
+                {
+                    if (_server != null)
+                    {
+                        _server.Connected.RemoveListener(OnServerPlayerConnected);
+                        _server.Authenticated.RemoveListener(OnServerPlayerAuthenticated);
+                    }
+                    _serverHooked = false;
+                    _server = null;
+                }
+                return;
+            }
+
+            if (_serverHooked && ReferenceEquals(_server, server))
                 return;
 
+            if (_server != null)
+            {
+                _server.Connected.RemoveListener(OnServerPlayerConnected);
+                _server.Authenticated.RemoveListener(OnServerPlayerAuthenticated);
+            }
+
+            SkinGateMessageSerializers.EnsureRegistered();
             _server = server;
             server.Connected.AddListener(OnServerPlayerConnected);
             server.Authenticated.AddListener(OnServerPlayerAuthenticated);
@@ -196,20 +211,35 @@ namespace SkinGate
 
         private void TryHookClient()
         {
-            if (_clientHooked)
-                return;
-
             var client = UnityEngine.Object.FindObjectOfType<NetworkClient>();
             if (client == null || !client.Active)
+            {
+                // Disconnected: allow a fresh request cycle on the next session.
+                if (_clientHooked)
+                {
+                    _clientHooked = false;
+                    _client = null;
+                    _clientRequestCount = 0;
+                    if (!AllowlistSession.IsHostAllowlistSource)
+                        AllowlistStore.InvalidateHostAllowlist();
+                }
+                return;
+            }
+
+            if (_clientHooked && ReferenceEquals(_client, client))
                 return;
 
+            SkinGateMessageSerializers.EnsureRegistered();
             _client = client;
             client.MessageHandler.RegisterHandler<SkinGateAllowlistMessage>(OnAllowlistReceived, false);
             _clientHooked = true;
 
             if (!client.IsHost)
             {
+                // Force a new pull every join so squadron role changes apply.
+                AllowlistStore.InvalidateHostAllowlist();
                 AllowlistStore.SetExpectHostAllowlist(true);
+                _clientRequestCount = 0;
                 SkinGatePlugin.Log?.LogInfo("SkinGate client sync active — waiting for host allowlist.");
                 _nextClientRequest = Time.unscaledTime + 0.5f;
             }

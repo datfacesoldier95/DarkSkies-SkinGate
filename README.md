@@ -1,4 +1,4 @@
-# SkinGate 1.1.2 (Nuclear Option)
+# SkinGate 1.1.3 (Nuclear Option)
 
 BepInEx plugin: Discord squadron roles → per-SteamID livery allowlist. Host pushes the allowlist to clients over Mirage.
 

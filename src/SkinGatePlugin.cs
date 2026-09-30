@@ -15,7 +15,7 @@ namespace SkinGate
     {
         public const string PluginGuid = "com.darkskies.skingate";
         public const string PluginName = "SkinGate";
-        public const string PluginVersion = "1.1.2";
+        public const string PluginVersion = "1.1.3";
 
         public static SkinGatePlugin Instance { get; private set; }
         public static ManualLogSource Log { get; private set; }
@@ -305,6 +305,7 @@ namespace SkinGate
                 LoadedAt = DateTime.UtcNow;
                 HasHostAllowlist = true;
                 LoadedPath = "(from host)";
+                AirframeSquadronCache.Clear();
                 var hash = AllowlistNetworkSync.ShortHash(json);
                 SkinGatePlugin.Log?.LogInfo(
                     $"Allowlist synced from host ({Data.Players.Count} players) hash={hash}.");
@@ -313,6 +314,12 @@ namespace SkinGate
             {
                 SkinGatePlugin.Log?.LogError($"Host allowlist apply failed: {ex}");
             }
+        }
+
+        public static void InvalidateHostAllowlist()
+        {
+            HasHostAllowlist = false;
+            AirframeSquadronCache.Clear();
         }
 
         public static void Reload(string path)
@@ -335,6 +342,7 @@ namespace SkinGate
                 Data = AllowlistData.FromJson(json);
                 LoadedAt = DateTime.UtcNow;
                 HasHostAllowlist = true;
+                AirframeSquadronCache.Clear();
                 SkinGatePlugin.Log?.LogInfo(
                     $"Allowlist loaded ({Data.Players.Count} players) from {path}");
             }
