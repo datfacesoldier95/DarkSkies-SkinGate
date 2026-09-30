@@ -1,11 +1,11 @@
-DarkSkies SkinGate 1.1.7 — install once (host and all joiners)
+DarkSkies SkinGate 1.1.8 — install once (host and all joiners)
 
-CRITICAL: Host and joiners must use the SAME SkinGate version.
-1.1.7 removes network allowlist sync (it was causing "Local Client Stopped").
+CRITICAL: Host and joiners must use the SAME SkinGate version (1.1.8).
+Older builds with network allowlist sync cause "Local Client Stopped" on join.
 
 Install
 1. Remove old SkinGate / DarkSkies SkinGate * folders and any SkinGate zips in plugins.
-2. Import DarkSkies-SkinGate-1.1.7.zip (folder must be BepInEx\plugins\DarkSkies.SkinGate).
+2. Import DarkSkies-SkinGate-1.1.8.zip (folder must be BepInEx\plugins\DarkSkies.SkinGate).
 3. Enable the mod.
 
 Allowlist (everyone who needs squadron skins)

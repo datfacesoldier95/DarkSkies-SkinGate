@@ -15,7 +15,7 @@ namespace SkinGate
     {
         public const string PluginGuid = "com.darkskies.skingate";
         public const string PluginName = "DarkSkies SkinGate";
-        public const string PluginVersion = "1.1.7";
+        public const string PluginVersion = "1.1.8";
 
         public static SkinGatePlugin Instance { get; private set; }
         public static ManualLogSource Log { get; private set; }
@@ -61,7 +61,6 @@ namespace SkinGate
 
             // File-based allowlist only — Mirage custom messages were dropping joiners
             // ("local client stopped" / connect failed).
-            AllowlistStore.SetExpectHostAllowlist(false);
             var allowlistPath = ResolveAllowlistPath(AllowlistPath.Value);
             AllowlistStore.Reload(allowlistPath);
             _seenWriteTimeUtc = AllowlistStore.FileWriteTimeUtc;
@@ -271,36 +270,11 @@ namespace SkinGate
         public static DateTime FileWriteTimeUtc { get; private set; }
         public static string LoadedPath { get; private set; }
         public static bool HasHostAllowlist { get; private set; }
-        public static bool ExpectHostAllowlist { get; private set; }
 
         public static void SetExpectHostAllowlist(bool expect)
         {
-            ExpectHostAllowlist = expect;
-        }
-
-        public static void ApplyHostJson(string json)
-        {
-            try
-            {
-                Data = AllowlistData.FromJson(json);
-                LoadedAt = DateTime.UtcNow;
-                HasHostAllowlist = true;
-                LoadedPath = "(from host)";
-                AirframeSquadronCache.Clear();
-                var hash = AllowlistNetworkSync.ShortHash(json);
-                SkinGatePlugin.Log?.LogInfo(
-                    $"Allowlist synced from host ({Data.Players.Count} players) hash={hash}.");
-            }
-            catch (Exception ex)
-            {
-                SkinGatePlugin.Log?.LogError($"Host allowlist apply failed: {ex}");
-            }
-        }
-
-        public static void InvalidateHostAllowlist()
-        {
-            HasHostAllowlist = false;
-            AirframeSquadronCache.Clear();
+            // No-op: network allowlist sync removed (caused Local Client Stopped).
+            _ = expect;
         }
 
         public static void Reload(string path)
@@ -608,27 +582,17 @@ namespace SkinGate
                 if (steamId == 0)
                     return;
 
-                // Client waiting for host sync: fail closed to builtins only (not full Workshop list).
-                var waitingForHost = AllowlistStore.ExpectHostAllowlist && !AllowlistStore.HasHostAllowlist;
-
                 // If none of this airframe's options are squadron-assigned, show vanilla builtins.
-                var hasSquadronSkinForAirframe = !waitingForHost
-                    && AllowlistStore.Data.OptionsContainExplicitAllow(steamId, resultsList);
-                if (!waitingForHost)
-                {
-                    var defName = aircraft != null ? aircraft.name : null;
-                    AllowlistStore.CacheAirframeMode(steamId, defName, hasSquadronSkinForAirframe);
-                }
+                var hasSquadronSkinForAirframe =
+                    AllowlistStore.Data.OptionsContainExplicitAllow(steamId, resultsList);
+                var defName = aircraft != null ? aircraft.name : null;
+                AllowlistStore.CacheAirframeMode(steamId, defName, hasSquadronSkinForAirframe);
 
                 for (var i = resultsList.Count - 1; i >= 0; i--)
                 {
                     var key = resultsList[i].Item1;
                     bool allowed;
-                    if (waitingForHost)
-                    {
-                        allowed = key.Type == LiveryKey.KeyType.Builtin;
-                    }
-                    else if (!hasSquadronSkinForAirframe)
+                    if (!hasSquadronSkinForAirframe)
                     {
                         allowed = key.Type == LiveryKey.KeyType.Builtin;
                     }
@@ -643,7 +607,7 @@ namespace SkinGate
                         continue;
                     }
 
-                    if (waitingForHost || !hasSquadronSkinForAirframe)
+                    if (!hasSquadronSkinForAirframe)
                         continue;
 
                     var customLabel = AllowlistStore.Data.GetCustomLabel(steamId, key);

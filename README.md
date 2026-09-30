@@ -1,8 +1,8 @@
-# DarkSkies SkinGate 1.1.7 (Nuclear Option)
+# DarkSkies SkinGate 1.1.8 (Nuclear Option)
 
 BepInEx plugin: Discord squadron roles → per-SteamID livery allowlist (file-based `allowlist.json`).
 
-Network allowlist sync was removed in 1.1.7 — Mirage custom messages were disconnecting joiners.
+Network allowlist sync was removed in 1.1.7+ — Mirage custom messages were disconnecting joiners ("Local Client Stopped"). **1.1.8** excludes that code from the build entirely.
 
 If an airframe has no squadron-assigned skin in its livery list, the hangar shows **vanilla builtins** for that airframe.
 
@@ -27,9 +27,10 @@ cd "C:\DarkSkies\NO Skin Gate"
 
 ## Multiplayer
 
-- **Everyone:** SkinGate **1.1.7** + the same `allowlist.json` from Discord `/sync-skins` (attachment)
+- **Everyone:** SkinGate **1.1.8** + the same `allowlist.json` from Discord `/sync-skins` (attachment)
 - Put the file in `BepInEx\plugins\DarkSkies.SkinGate\allowlist.json`
 - Press **F11** (or restart) after updating the file
+- Host BepInEx log must say `DarkSkies SkinGate 1.1.8 loaded` — **not** `1.1.6` / `host sync active`
 
 ## Config
 
