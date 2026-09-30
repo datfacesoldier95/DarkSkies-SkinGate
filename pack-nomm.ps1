@@ -1,5 +1,5 @@
 # Pack DarkSkies-SkinGate-<version>.zip for NOMM (host + clients).
-# Zip root folder name = NOMM display id (includes version).
+# Stable mod id DarkSkies.SkinGate (version only in meta.artifact.version) for multiplayer match.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $dist = Join-Path $root 'dist'
@@ -13,7 +13,7 @@ if ($pluginCs -notmatch 'PluginVersion\s*=\s*"([^"]+)"') {
   Write-Error 'Could not find PluginVersion in SkinGatePlugin.cs'
 }
 $version = $Matches[1]
-$modFolderName = "DarkSkies SkinGate $version"
+$modId = 'DarkSkies.SkinGate'
 $zipName = "DarkSkies-SkinGate-$version.zip"
 $outZip = Join-Path $dist $zipName
 
@@ -21,12 +21,10 @@ if (-not (Test-Path $dll)) {
   Write-Error "Build first: dotnet build `"$root\SkinGate.csproj`" -c Release"
 }
 
-# Refresh meta.json id/version/filename for this pack
 $metaPath = Join-Path $dist 'meta.json'
-# Write meta.json as text so we can keep both downloadUrl keys NOMM sometimes emits.
 @"
 {
-  "id": "$modFolderName",
+  "id": "$modId",
   "artifact": {
     "fileName": "$zipName",
     "version": "$version",
@@ -44,7 +42,7 @@ $metaPath = Join-Path $dist 'meta.json'
 "@ | Set-Content -Path $metaPath -Encoding utf8
 
 if (Test-Path $staging) { Remove-Item -Recurse -Force $staging }
-$modStaging = Join-Path $staging $modFolderName
+$modStaging = Join-Path $staging $modId
 New-Item -ItemType Directory -Force -Path $dist, $modStaging | Out-Null
 
 Copy-Item -Force $dll (Join-Path $modStaging 'SkinGate.dll')
@@ -65,7 +63,7 @@ if ($allowSrc) {
 }
 
 if (Test-Path $outZip) { Remove-Item -Force $outZip }
-Compress-Archive -Path (Join-Path $staging $modFolderName) -DestinationPath $outZip -CompressionLevel Optimal
+Compress-Archive -Path (Join-Path $staging $modId) -DestinationPath $outZip -CompressionLevel Optimal
 
 Remove-Item -Recurse -Force $staging
 
@@ -74,4 +72,4 @@ Copy-Item -Force $outZip (Join-Path $desktop $zipName)
 
 Write-Host "Created: $outZip"
 Write-Host "Copied to Desktop: $zipName"
-Write-Host "NOMM will show: $modFolderName"
+Write-Host "NOMM/NOSMR mod id: $modId (version $version)"

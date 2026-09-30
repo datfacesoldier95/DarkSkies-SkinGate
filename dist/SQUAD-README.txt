@@ -1,19 +1,18 @@
 DarkSkies SkinGate — install once (host and all joiners)
 
-1. Install BepInEx via NOMM if needed.
-2. Import the DarkSkies-SkinGate-*.zip in NOMM (Add from File), or extract the zip into BepInEx\plugins so you get a folder named like:
-   DarkSkies SkinGate 1.1.4
-3. Enable the mod. In NOMM it should appear as "DarkSkies SkinGate <version>".
+IMPORTANT: Host and joiners must use the SAME SkinGate version or the server will not appear.
 
-Airframes with no squadron skin assigned show vanilla skins.
-Airframes that have a squadron skin only show that skin.
+1. Install BepInEx via NOMM if needed.
+2. Remove any old SkinGate installs first:
+   - folders named SkinGate, DarkSkies SkinGate *, or DarkSkies.SkinGate
+   - any SkinGate*.zip sitting in BepInEx\plugins
+3. Import DarkSkies-SkinGate-*.zip in NOMM (Add from File), or extract so you get:
+   BepInEx\plugins\DarkSkies.SkinGate\
+4. Enable the mod. NOMM id is DarkSkies.SkinGate (stable). Version is in the mod details.
 
 You do NOT need allowlist.json on client PCs.
-The host runs Discord /sync-skins, then hosts a session.
-Clients receive the allowlist from the host automatically.
+Host runs Discord /sync-skins, then hosts. Clients sync in-session.
 
 Check BepInEx\LogOutput.log for:
   SkinGate SYNC recv … hash=…
   SkinGate SYNC ack … (on the host)
-
-Host: press F11 after /sync-skins if the game is already open.

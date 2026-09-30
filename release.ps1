@@ -25,7 +25,7 @@ if ($pluginCs -notmatch 'PluginVersion\s*=\s*"([^"]+)"') {
 $version = $Matches[1]
 $tag = "v$version"
 $zipName = "DarkSkies-SkinGate-$version.zip"
-$displayName = "DarkSkies SkinGate $version"
+$displayName = "DarkSkies.SkinGate $version"
 
 Write-Host "=== $displayName release ==="
 

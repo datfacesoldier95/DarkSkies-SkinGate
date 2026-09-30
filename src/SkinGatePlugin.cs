@@ -15,7 +15,7 @@ namespace SkinGate
     {
         public const string PluginGuid = "com.darkskies.skingate";
         public const string PluginName = "DarkSkies SkinGate";
-        public const string PluginVersion = "1.1.5";
+        public const string PluginVersion = "1.1.6";
 
         public static SkinGatePlugin Instance { get; private set; }
         public static ManualLogSource Log { get; private set; }
